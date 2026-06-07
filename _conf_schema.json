@@ -1,0 +1,39 @@
+{
+  "platform_id": {
+    "description": "UMO 中的平台 ID，NapCat/OneBot v11 通常是 aiocqhttp。",
+    "type": "string",
+    "default": "aiocqhttp"
+  },
+  "controller_umos": {
+    "description": "允许发送 /gm 指令的控制群。可填写完整 UMO 或群号。",
+    "type": "list",
+    "default": [],
+    "hint": "示例：aiocqhttp:GroupMessage:123456789。也可以只填 123456789。"
+  },
+  "operator_user_ids": {
+    "description": "允许操作的 QQ 号列表。",
+    "type": "list",
+    "default": [],
+    "hint": "建议填写你的 QQ 号。为空时默认不允许任何人操作，除非开启 allow_all_users_in_controller。"
+  },
+  "allow_all_users_in_controller": {
+    "description": "是否允许控制群内所有成员使用 /gm。",
+    "type": "bool",
+    "default": false,
+    "hint": "高风险选项。开启后，只要消息来自 controller_umos，就可以执行跨群管理。"
+  },
+  "managed_targets": {
+    "description": "允许被管理的目标群白名单。可填写完整 UMO 或群号。",
+    "type": "list",
+    "default": [],
+    "hint": "只有这里列出的群能被 /gm 管理。建议和 AstrBot 的 UMO 白名单保持一致。"
+  },
+  "target_aliases": {
+    "description": "目标群别名映射。",
+    "type": "dict",
+    "default": {},
+    "hint": "示例：{\"test\": \"aiocqhttp:GroupMessage:123456789\", \"main\": \"987654321\"}",
+    "editor_mode": true,
+    "editor_language": "json"
+  }
+}

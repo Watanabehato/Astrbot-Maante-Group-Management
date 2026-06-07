@@ -1,14 +1,99 @@
-# astrbot-plugin-helloworld
+# AstrBot MaaNTE Group Management
 
-AstrBot 插件模板 / A template plugin for AstrBot plugin feature
+一个用于 AstrBot + NapCat QQ（OneBot v11 / aiocqhttp）的跨群管理插件。
 
-> [!NOTE]
-> This repo is just a template of [AstrBot](https://github.com/AstrBotDevs/AstrBot) Plugin.
-> 
-> [AstrBot](https://github.com/AstrBotDevs/AstrBot) is an agentic assistant for both personal and group conversations. It can be deployed across dozens of mainstream instant messaging platforms, including QQ, Telegram, Feishu, DingTalk, Slack, LINE, Discord, Matrix, etc. In addition, it provides a reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you need a personal AI companion, an intelligent customer support agent, an automation assistant, or an enterprise knowledge base, AstrBot enables you to quickly build AI applications directly within your existing messaging workflows.
+它的设计目标是：在一个控制群 A 中发送 `/gm` 指令，管理配置在 UMO 白名单里的其他 QQ 群。
 
-# Supports
+## 功能
 
-- [AstrBot Repo](https://github.com/AstrBotDevs/AstrBot)
-- [AstrBot Plugin Development Docs (Chinese)](https://docs.astrbot.app/dev/star/plugin-new.html)
-- [AstrBot Plugin Development Docs (English)](https://docs.astrbot.app/en/dev/star/plugin-new.html)
+- 控制群授权：只有 `controller_umos` 中的群可以发起管理指令。
+- 操作者授权：默认只允许 `operator_user_ids` 中的 QQ 号操作。
+- 目标群白名单：只有 `managed_targets` 中的群可以被管理。
+- 目标别名：可以给被管理群设置短别名，减少误操作。
+- NapCat 群管理动作：
+  - 发送群消息
+  - 发送 @全员消息
+  - 发布群公告
+  - 单人禁言 / 解禁
+  - 踢人
+  - 全员禁言
+  - 设置群名片
+  - 设置 / 取消管理员
+  - 查询群信息
+
+## 配置
+
+插件加载后，在 AstrBot WebUI 的插件配置中填写：
+
+```json
+{
+  "platform_id": "aiocqhttp",
+  "controller_umos": [
+    "aiocqhttp:GroupMessage:111111111"
+  ],
+  "operator_user_ids": [
+    "123456789"
+  ],
+  "allow_all_users_in_controller": false,
+  "managed_targets": [
+    "aiocqhttp:GroupMessage:222222222",
+    "333333333"
+  ],
+  "target_aliases": {
+    "test": "aiocqhttp:GroupMessage:222222222",
+    "main": "333333333"
+  }
+}
+```
+
+可以在群里发送 AstrBot 内置命令 `/sid` 获取当前 UMO。UMO 形如：
+
+```text
+aiocqhttp:GroupMessage:群号
+```
+
+## 指令
+
+所有指令都从控制群发送：
+
+```text
+/gm help
+/gm sid
+/gm list
+/gm info <目标>
+/gm send <目标> <内容>
+/gm atall <目标> <内容>
+/gm notice <目标> <公告内容>
+/gm mute <目标> <QQ号> <分钟>
+/gm unmute <目标> <QQ号>
+/gm kick <目标> <QQ号> [reject]
+/gm wholeban <目标> on|off
+/gm card <目标> <QQ号> <群名片>
+/gm admin <目标> <QQ号> on|off
+```
+
+示例：
+
+```text
+/gm mute test 123456789 10
+/gm unmute test 123456789
+/gm kick test 123456789 reject
+/gm wholeban main on
+/gm send main 今晚维护，稍后恢复。
+/gm atall main 今晚维护，稍后恢复。
+/gm notice main 今晚 23:00-23:30 维护，期间可能无法正常使用。
+/gm card test 123456789 新群名片
+```
+
+`<目标>` 可以是：
+
+- `target_aliases` 中配置的别名，例如 `test`
+- QQ 群号，例如 `222222222`
+- 完整 UMO，例如 `aiocqhttp:GroupMessage:222222222`
+
+## 注意
+
+- 机器人账号必须在目标群中，并拥有执行对应动作所需的 QQ 群权限。
+- `managed_targets` 为空时，插件不会允许管理任何群。
+- `operator_user_ids` 为空时，默认不会允许任何人操作，除非显式开启 `allow_all_users_in_controller`。
+- `atall`、`notice`、`admin` 和 `kick reject` 属于高风险动作，请谨慎开放给多人。
