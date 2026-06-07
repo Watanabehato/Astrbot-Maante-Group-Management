@@ -81,163 +81,175 @@ class MaanteGroupManagementPlugin(Star):
 
     async def _cmd_send(self, event: AstrMessageEvent, args: list[str]) -> str:
         self._require_args(args, 2, "用法：/gm send <目标> <内容>")
-        target = self._resolve_target(args[0])
+        targets = self._resolve_targets(args[0])
         message = " ".join(args[1:]).strip()
         if not message:
             raise CommandError("发送内容不能为空。")
 
-        await self._call_onebot(
-            event,
-            "send_group_msg",
-            group_id=target.group_id,
-            message=message,
-        )
-        return f"已向 {target.display_name} 发送消息。"
+        for target in targets:
+            await self._call_onebot(
+                event,
+                "send_group_msg",
+                group_id=target.group_id,
+                message=message,
+            )
+        return f"已向 {self._targets_text(targets)} 发送消息。"
 
     async def _cmd_at_all(self, event: AstrMessageEvent, args: list[str]) -> str:
         self._require_args(args, 2, "用法：/gm atall <目标> <内容>")
-        target = self._resolve_target(args[0])
+        targets = self._resolve_targets(args[0])
         message = " ".join(args[1:]).strip()
         if not message:
             raise CommandError("@全员消息内容不能为空。")
 
-        await self._call_onebot(
-            event,
-            "send_group_msg",
-            group_id=target.group_id,
-            message=[
-                {"type": "at", "data": {"qq": "all"}},
-                {"type": "text", "data": {"text": f" {message}"}},
-            ],
-        )
-        return f"已向 {target.display_name} 发送 @全员消息。"
+        for target in targets:
+            await self._call_onebot(
+                event,
+                "send_group_msg",
+                group_id=target.group_id,
+                message=[
+                    {"type": "at", "data": {"qq": "all"}},
+                    {"type": "text", "data": {"text": f" {message}"}},
+                ],
+            )
+        return f"已向 {self._targets_text(targets)} 发送 @全员消息。"
 
     async def _cmd_notice(self, event: AstrMessageEvent, args: list[str]) -> str:
         self._require_args(args, 2, "用法：/gm notice <目标> <公告内容>")
-        target = self._resolve_target(args[0])
+        targets = self._resolve_targets(args[0])
         content = " ".join(args[1:]).strip()
         if not content:
             raise CommandError("公告内容不能为空。")
 
-        await self._call_onebot(
-            event,
-            "_send_group_notice",
-            group_id=target.group_id,
-            content=content,
-        )
-        return f"已向 {target.display_name} 发布群公告。"
+        for target in targets:
+            await self._call_onebot(
+                event,
+                "_send_group_notice",
+                group_id=target.group_id,
+                content=content,
+            )
+        return f"已向 {self._targets_text(targets)} 发布群公告。"
 
     async def _cmd_mute(self, event: AstrMessageEvent, args: list[str]) -> str:
         self._require_args(args, 3, "用法：/gm mute <目标> <QQ号> <分钟>")
-        target = self._resolve_target(args[0])
+        targets = self._resolve_targets(args[0])
         user_id = self._parse_qq(args[1])
         minutes = self._parse_positive_int(args[2], "禁言分钟数")
         duration = minutes * 60
 
-        await self._call_onebot(
-            event,
-            "set_group_ban",
-            group_id=target.group_id,
-            user_id=user_id,
-            duration=duration,
-        )
-        return f"已在 {target.display_name} 禁言 {user_id} {minutes} 分钟。"
+        for target in targets:
+            await self._call_onebot(
+                event,
+                "set_group_ban",
+                group_id=target.group_id,
+                user_id=user_id,
+                duration=duration,
+            )
+        return f"已在 {self._targets_text(targets)} 禁言 {user_id} {minutes} 分钟。"
 
     async def _cmd_unmute(self, event: AstrMessageEvent, args: list[str]) -> str:
         self._require_args(args, 2, "用法：/gm unmute <目标> <QQ号>")
-        target = self._resolve_target(args[0])
+        targets = self._resolve_targets(args[0])
         user_id = self._parse_qq(args[1])
 
-        await self._call_onebot(
-            event,
-            "set_group_ban",
-            group_id=target.group_id,
-            user_id=user_id,
-            duration=0,
-        )
-        return f"已在 {target.display_name} 解除 {user_id} 的禁言。"
+        for target in targets:
+            await self._call_onebot(
+                event,
+                "set_group_ban",
+                group_id=target.group_id,
+                user_id=user_id,
+                duration=0,
+            )
+        return f"已在 {self._targets_text(targets)} 解除 {user_id} 的禁言。"
 
     async def _cmd_kick(self, event: AstrMessageEvent, args: list[str]) -> str:
         self._require_args(args, 2, "用法：/gm kick <目标> <QQ号> [reject]")
-        target = self._resolve_target(args[0])
+        targets = self._resolve_targets(args[0])
         user_id = self._parse_qq(args[1])
         reject = len(args) >= 3 and args[2].lower() in {"reject", "true", "yes", "1", "拒绝"}
 
-        await self._call_onebot(
-            event,
-            "set_group_kick",
-            group_id=target.group_id,
-            user_id=user_id,
-            reject_add_request=reject,
-        )
+        for target in targets:
+            await self._call_onebot(
+                event,
+                "set_group_kick",
+                group_id=target.group_id,
+                user_id=user_id,
+                reject_add_request=reject,
+            )
         reject_text = "，并拒绝再次入群" if reject else ""
-        return f"已从 {target.display_name} 踢出 {user_id}{reject_text}。"
+        return f"已从 {self._targets_text(targets)} 踢出 {user_id}{reject_text}。"
 
     async def _cmd_whole_ban(self, event: AstrMessageEvent, args: list[str]) -> str:
         self._require_args(args, 2, "用法：/gm wholeban <目标> on|off")
-        target = self._resolve_target(args[0])
+        targets = self._resolve_targets(args[0])
         enable = self._parse_bool(args[1], "全员禁言开关")
 
-        await self._call_onebot(
-            event,
-            "set_group_whole_ban",
-            group_id=target.group_id,
-            enable=enable,
-        )
-        return f"已{'开启' if enable else '关闭'} {target.display_name} 的全员禁言。"
+        for target in targets:
+            await self._call_onebot(
+                event,
+                "set_group_whole_ban",
+                group_id=target.group_id,
+                enable=enable,
+            )
+        return f"已{'开启' if enable else '关闭'} {self._targets_text(targets)} 的全员禁言。"
 
     async def _cmd_card(self, event: AstrMessageEvent, args: list[str]) -> str:
         self._require_args(args, 3, "用法：/gm card <目标> <QQ号> <群名片>")
-        target = self._resolve_target(args[0])
+        targets = self._resolve_targets(args[0])
         user_id = self._parse_qq(args[1])
         card = " ".join(args[2:]).strip()
         if not card:
             raise CommandError("群名片不能为空。")
 
-        await self._call_onebot(
-            event,
-            "set_group_card",
-            group_id=target.group_id,
-            user_id=user_id,
-            card=card,
-        )
-        return f"已在 {target.display_name} 设置 {user_id} 的群名片。"
+        for target in targets:
+            await self._call_onebot(
+                event,
+                "set_group_card",
+                group_id=target.group_id,
+                user_id=user_id,
+                card=card,
+            )
+        return f"已在 {self._targets_text(targets)} 设置 {user_id} 的群名片。"
 
     async def _cmd_admin(self, event: AstrMessageEvent, args: list[str]) -> str:
         self._require_args(args, 3, "用法：/gm admin <目标> <QQ号> on|off")
-        target = self._resolve_target(args[0])
+        targets = self._resolve_targets(args[0])
         user_id = self._parse_qq(args[1])
         enable = self._parse_bool(args[2], "管理员开关")
 
-        await self._call_onebot(
-            event,
-            "set_group_admin",
-            group_id=target.group_id,
-            user_id=user_id,
-            enable=enable,
-        )
-        return f"已在 {target.display_name} {'设置' if enable else '取消'} {user_id} 的管理员权限。"
+        for target in targets:
+            await self._call_onebot(
+                event,
+                "set_group_admin",
+                group_id=target.group_id,
+                user_id=user_id,
+                enable=enable,
+            )
+        return f"已在 {self._targets_text(targets)} {'设置' if enable else '取消'} {user_id} 的管理员权限。"
 
     async def _cmd_info(self, event: AstrMessageEvent, args: list[str]) -> str:
         self._require_args(args, 1, "用法：/gm info <目标>")
-        target = self._resolve_target(args[0])
-        info = await self._call_onebot(
-            event,
-            "get_group_info",
-            group_id=target.group_id,
-            no_cache=True,
-        )
+        targets = self._resolve_targets(args[0])
+        lines = []
+        for target in targets:
+            info = await self._call_onebot(
+                event,
+                "get_group_info",
+                group_id=target.group_id,
+                no_cache=True,
+            )
 
-        data = info.get("data", info) if isinstance(info, dict) else {}
-        group_name = data.get("group_name", "未知群名")
-        member_count = data.get("member_count", "?")
-        max_member_count = data.get("max_member_count", "?")
-        return (
-            f"{target.display_name}\n"
-            f"群号：{target.group_id}\n"
-            f"群名：{group_name}\n"
-            f"人数：{member_count}/{max_member_count}"
-        )
+            data = info.get("data", info) if isinstance(info, dict) else {}
+            group_name = data.get("group_name", "未知群名")
+            member_count = data.get("member_count", "?")
+            max_member_count = data.get("max_member_count", "?")
+            lines.append(
+                f"{target.display_name}\n"
+                f"群号：{target.group_id}\n"
+                f"群名：{group_name}\n"
+                f"人数：{member_count}/{max_member_count}"
+            )
+        return "\n\n".join(lines)
 
     async def _call_onebot(self, event: AstrMessageEvent, action: str, **payload: Any) -> Any:
         client = getattr(event, "bot", None)
@@ -263,27 +275,60 @@ class MaanteGroupManagementPlugin(Star):
 
         return bool(self.config.get("allow_all_users_in_controller", False))
 
-    def _resolve_target(self, raw_target: str) -> "ManagedTarget":
+    def _resolve_targets(self, raw_target: str) -> list["ManagedTarget"]:
         target_aliases = self._target_aliases()
-        target_value = str(target_aliases.get(raw_target, raw_target)).strip()
-        group_id = self._extract_group_id(target_value)
+        target_values = self._target_values(raw_target, target_aliases)
+        targets: list[ManagedTarget] = []
+        seen_group_ids: set[str] = set()
 
-        if not group_id:
-            raise CommandError(f"无法识别目标群：{raw_target}")
+        for target_value in target_values:
+            group_id = self._extract_group_id(target_value)
 
-        if not self._is_managed_target(target_value, group_id):
-            raise CommandError(
-                f"目标群不在 managed_targets 白名单中：{raw_target}\n"
-                "请在插件配置中加入该群的 UMO 或群号。"
+            if not group_id:
+                raise CommandError(f"无法识别目标群：{target_value}")
+
+            if group_id in seen_group_ids:
+                continue
+
+            if not self._is_managed_target(target_value, group_id):
+                raise CommandError(
+                    f"目标群不在 managed_targets 白名单中：{target_value}\n"
+                    "请在插件配置中加入该群的 UMO 或群号。"
+                )
+
+            targets.append(
+                ManagedTarget(
+                    group_id=group_id,
+                    display_name=self._target_display_name(raw_target, target_value, group_id),
+                )
             )
+            seen_group_ids.add(group_id)
 
-        display_name = raw_target
+        if not targets:
+            raise CommandError(f"目标为空：{raw_target}")
+
+        return targets
+
+    def _target_values(self, raw_target: str, aliases: dict[str, Any]) -> list[str]:
+        alias_value = aliases.get(raw_target, raw_target)
+        if isinstance(alias_value, list):
+            values = [str(item).strip() for item in alias_value if str(item).strip()]
+            if not values:
+                raise CommandError(f"别名 {raw_target} 的目标群列表为空。")
+            return values
+
+        value = str(alias_value).strip()
+        if not value:
+            raise CommandError(f"目标为空：{raw_target}")
+        return [value]
+
+    def _target_display_name(self, raw_target: str, target_value: str, group_id: str) -> str:
         if raw_target == target_value:
-            display_name = f"群 {group_id}"
-        else:
-            display_name = f"{raw_target}({group_id})"
+            return f"群 {group_id}"
+        return f"{raw_target}({group_id})"
 
-        return ManagedTarget(group_id=group_id, display_name=display_name)
+    def _targets_text(self, targets: list["ManagedTarget"]) -> str:
+        return "、".join(target.display_name for target in targets)
 
     def _is_managed_target(self, target_value: str, group_id: str) -> bool:
         managed_targets = self._string_set(self.config.get("managed_targets", []))
@@ -310,19 +355,49 @@ class MaanteGroupManagementPlugin(Star):
             alias = self._alias_for_value(target_aliases, item, group_id)
             prefix = f"{alias} -> " if alias else ""
             lines.append(f"- {prefix}{item} (群号 {group_id})")
-        return "\n".join(lines)
+        return "\n".join(lines) + self._alias_list_text(target_aliases)
 
     def _alias_for_value(self, aliases: dict[str, Any], value: str, group_id: str) -> str:
         for alias, alias_value in aliases.items():
-            alias_value = str(alias_value).strip()
-            if alias_value == value or self._extract_group_id(alias_value) == group_id:
-                return str(alias)
+            alias_values = alias_value if isinstance(alias_value, list) else [alias_value]
+            for item in alias_values:
+                item = str(item).strip()
+                if item == value or self._extract_group_id(item) == group_id:
+                    return str(alias)
         return ""
+
+    def _alias_list_text(self, aliases: dict[str, Any]) -> str:
+        if not aliases:
+            return ""
+
+        lines = ["", "已配置的目标别名："]
+        for alias, alias_value in aliases.items():
+            if isinstance(alias_value, list):
+                group_ids = [self._extract_group_id(item) or str(item) for item in alias_value]
+                lines.append(f"- {alias} -> {', '.join(group_ids)}")
+            else:
+                group_id = self._extract_group_id(alias_value) or str(alias_value)
+                lines.append(f"- {alias} -> {group_id}")
+        return "\n".join(lines)
+
+    def _validate_aliases(self, aliases: dict[str, Any]) -> dict[str, Any]:
+        for alias, alias_value in aliases.items():
+            if isinstance(alias_value, list):
+                if not alias_value:
+                    raise CommandError(f"target_aliases.{alias} 不能为空列表。")
+                continue
+            if isinstance(alias_value, str):
+                continue
+            raise CommandError(
+                f"target_aliases.{alias} 必须是字符串或字符串数组，"
+                "例如 \"123456789\" 或 [\"123456789\", \"987654321\"]。"
+            )
+        return aliases
 
     def _target_aliases(self) -> dict[str, Any]:
         value = self.config.get("target_aliases", {}) or {}
         if isinstance(value, dict):
-            return value
+            return self._validate_aliases(value)
 
         if isinstance(value, str) and value.strip():
             try:
@@ -331,11 +406,11 @@ class MaanteGroupManagementPlugin(Star):
                 raise CommandError(f"target_aliases 不是合法 JSON：{exc}") from exc
             if not isinstance(parsed, dict):
                 raise CommandError("target_aliases 必须是 JSON 对象，例如 {\"main\": \"123456789\"}。")
-            return parsed
+            return self._validate_aliases(parsed)
 
         return {}
 
-    def _extract_group_id(self, value: str) -> str:
+    def _extract_group_id(self, value: Any) -> str:
         value = str(value).strip()
         if value.isdigit():
             return value
@@ -377,7 +452,8 @@ class MaanteGroupManagementPlugin(Star):
             "/gm wholeban <目标> on|off\n"
             "/gm card <目标> <QQ号> <群名片>\n"
             "/gm admin <目标> <QQ号> on|off\n\n"
-            "目标可以是 target_aliases 里的别名、群号，或 aiocqhttp:GroupMessage:群号。"
+            "目标可以是 target_aliases 里的别名、群号，或 aiocqhttp:GroupMessage:群号；"
+            "别名可以对应单个群或多个群。"
         )
 
     def _sid_text(self, event: AstrMessageEvent) -> str:

@@ -9,7 +9,7 @@
 - 控制群授权：只有 `controller_umos` 中的群可以发起管理指令。
 - 操作者授权：默认只允许 `operator_user_ids` 中的 QQ 号操作。
 - 目标群白名单：只有 `managed_targets` 中的群可以被管理。
-- 目标别名：可以给被管理群设置短别名，减少误操作。
+- 目标别名：可以给单个群或多个群设置短别名，减少误操作。
 - NapCat 群管理动作：
   - 发送群消息
   - 发送 @全员消息
@@ -39,7 +39,20 @@
     "aiocqhttp:GroupMessage:222222222",
     "333333333"
   ],
-  "target_aliases": "{\"test\": \"aiocqhttp:GroupMessage:222222222\", \"main\": \"333333333\"}"
+  "target_aliases": "{\"test\": \"aiocqhttp:GroupMessage:222222222\", \"main\": \"333333333\", \"batch\": [\"222222222\", \"aiocqhttp:GroupMessage:333333333\"]}"
+}
+```
+
+`target_aliases` 是一个 JSON 对象。值可以是单个群，也可以是多个群组成的数组：
+
+```json
+{
+  "main": "333333333",
+  "test": "aiocqhttp:GroupMessage:222222222",
+  "batch": [
+    "222222222",
+    "aiocqhttp:GroupMessage:333333333"
+  ]
 }
 ```
 
@@ -79,12 +92,13 @@ aiocqhttp:GroupMessage:群号
 /gm send main 今晚维护，稍后恢复。
 /gm atall main 今晚维护，稍后恢复。
 /gm notice main 今晚 23:00-23:30 维护，期间可能无法正常使用。
+/gm send batch 这条消息会发到 batch 里的每个群。
 /gm card test 123456789 新群名片
 ```
 
 `<目标>` 可以是：
 
-- `target_aliases` 中配置的别名，例如 `test`
+- `target_aliases` 中配置的别名，例如 `test` 或分组别名 `batch`
 - QQ 群号，例如 `222222222`
 - 完整 UMO，例如 `aiocqhttp:GroupMessage:222222222`
 
