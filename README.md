@@ -35,6 +35,7 @@
     "123456789"
   ],
   "allow_all_users_in_controller": false,
+  "ignore_send_timeout_1200": true,
   "managed_targets": [
     "aiocqhttp:GroupMessage:222222222",
     "333333333"
@@ -108,3 +109,4 @@ aiocqhttp:GroupMessage:群号
 - `managed_targets` 为空时，插件不会允许管理任何群。
 - `operator_user_ids` 为空时，默认不会允许任何人操作，除非显式开启 `allow_all_users_in_controller`。
 - `atall`、`notice`、`admin` 和 `kick reject` 属于高风险动作，请谨慎开放给多人。
+- NapCat 偶尔会在消息已发出后仍因 QQNT 回执超时抛出 `retcode=1200`。默认 `ignore_send_timeout_1200` 为 `true`，插件会把发送消息和群公告的这类超时按“可能已发送”处理。

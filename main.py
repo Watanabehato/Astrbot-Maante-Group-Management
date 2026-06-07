@@ -273,7 +273,31 @@ class MaanteGroupManagementPlugin(Star):
             raise CommandError("当前事件没有可用的 OneBot 客户端，请确认正在通过 NapCat/aiocqhttp 接入。")
 
         logger.info(f"{PLUGIN_NAME} call {action}: {payload}")
-        return await client.api.call_action(action, **payload)
+        try:
+            return await client.api.call_action(action, **payload)
+        except Exception as exc:
+            if self._should_ignore_send_timeout(action, exc):
+                logger.warning(
+                    f"{PLUGIN_NAME} ignored NapCat send timeout for {action}; "
+                    f"message may already be sent: {exc}"
+                )
+                return {"status": "ok", "retcode": 0, "message": "ignored NapCat send timeout"}
+            raise
+
+    def _should_ignore_send_timeout(self, action: str, exc: Exception) -> bool:
+        if not self.config.get("ignore_send_timeout_1200", True):
+            return False
+
+        send_actions = {"send_group_msg", "send_msg", "_send_group_notice"}
+        if action not in send_actions:
+            return False
+
+        retcode = getattr(exc, "retcode", None)
+        if retcode != 1200:
+            return False
+
+        message = str(exc)
+        return "Timeout" in message and "sendMsg" in message
 
     def _is_authorized(self, event: AstrMessageEvent) -> bool:
         controller_umos = self._string_set(self.config.get("controller_umos", []))
