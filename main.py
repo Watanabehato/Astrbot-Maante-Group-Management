@@ -9,6 +9,22 @@ from astrbot.api.star import Context, Star, register
 
 PLUGIN_NAME = "astrbot_plugin_maante_group_management"
 
+COMMAND_DESCRIPTIONS = [
+    ("/gm help", "显示本帮助和所有子指令说明。"),
+    ("/gm sid", "查看当前控制群的 UMO、群号、平台和发送者 QQ。"),
+    ("/gm list", "列出已配置的被管理目标群和目标别名。"),
+    ("/gm info <目标>", "查询目标群信息；目标可以是单群或多群别名。"),
+    ("/gm send <目标> <内容>", "向目标群发送普通文本消息。"),
+    ("/gm atall <目标> <内容>", "向目标群发送 @全员 消息。"),
+    ("/gm notice <目标> <公告内容>", "向目标群发布群公告。"),
+    ("/gm mute <目标> <QQ号> <分钟>", "在目标群禁言指定 QQ 号。"),
+    ("/gm unmute <目标> <QQ号>", "在目标群解除指定 QQ 号的禁言。"),
+    ("/gm kick <目标> <QQ号> [reject]", "从目标群踢出指定 QQ 号；加 reject 会拒绝再次入群。"),
+    ("/gm wholeban <目标> on|off", "开启或关闭目标群全员禁言。"),
+    ("/gm card <目标> <QQ号> <群名片>", "设置指定 QQ 号在目标群的群名片。"),
+    ("/gm admin <目标> <QQ号> on|off", "设置或取消指定 QQ 号在目标群的管理员权限。"),
+]
+
 
 @register(
     PLUGIN_NAME,
@@ -24,7 +40,7 @@ class MaanteGroupManagementPlugin(Star):
     @filter.command("gm")
     @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
     async def group_management(self, event: AstrMessageEvent):
-        """跨群管理指令入口。"""
+        """跨群管理指令入口，发送 /gm help 查看子指令说明。"""
         event.stop_event()
 
         if not self._is_authorized(event):
@@ -435,23 +451,12 @@ class MaanteGroupManagementPlugin(Star):
         return shlex.split(text)
 
     def _help_text(self, event: AstrMessageEvent) -> str:
+        command_lines = "\n".join(f"{usage} - {description}" for usage, description in COMMAND_DESCRIPTIONS)
         return (
             "UMO 群管理插件\n"
             f"当前 UMO：{event.unified_msg_origin}\n"
             f"当前群号：{event.get_group_id() or '-'}\n\n"
-            "指令：\n"
-            "/gm sid\n"
-            "/gm list\n"
-            "/gm info <目标>\n"
-            "/gm send <目标> <内容>\n"
-            "/gm atall <目标> <内容>\n"
-            "/gm notice <目标> <公告内容>\n"
-            "/gm mute <目标> <QQ号> <分钟>\n"
-            "/gm unmute <目标> <QQ号>\n"
-            "/gm kick <目标> <QQ号> [reject]\n"
-            "/gm wholeban <目标> on|off\n"
-            "/gm card <目标> <QQ号> <群名片>\n"
-            "/gm admin <目标> <QQ号> on|off\n\n"
+            f"指令：\n{command_lines}\n\n"
             "目标可以是 target_aliases 里的别名、群号，或 aiocqhttp:GroupMessage:群号；"
             "别名可以对应单个群或多个群。"
         )
