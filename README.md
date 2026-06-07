@@ -39,10 +39,7 @@
     "aiocqhttp:GroupMessage:222222222",
     "333333333"
   ],
-  "target_aliases": {
-    "test": "aiocqhttp:GroupMessage:222222222",
-    "main": "333333333"
-  }
+  "target_aliases": "{\"test\": \"aiocqhttp:GroupMessage:222222222\", \"main\": \"333333333\"}"
 }
 ```
 

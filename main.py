@@ -1,3 +1,4 @@
+import json
 import shlex
 from typing import Any
 
@@ -263,7 +264,7 @@ class MaanteGroupManagementPlugin(Star):
         return bool(self.config.get("allow_all_users_in_controller", False))
 
     def _resolve_target(self, raw_target: str) -> "ManagedTarget":
-        target_aliases = self.config.get("target_aliases", {}) or {}
+        target_aliases = self._target_aliases()
         target_value = str(target_aliases.get(raw_target, raw_target)).strip()
         group_id = self._extract_group_id(target_value)
 
@@ -298,7 +299,7 @@ class MaanteGroupManagementPlugin(Star):
 
     def _target_list_text(self) -> str:
         managed_targets = self._string_list(self.config.get("managed_targets", []))
-        target_aliases = self.config.get("target_aliases", {}) or {}
+        target_aliases = self._target_aliases()
 
         if not managed_targets:
             return "managed_targets 为空，目前不会允许管理任何目标群。"
@@ -317,6 +318,22 @@ class MaanteGroupManagementPlugin(Star):
             if alias_value == value or self._extract_group_id(alias_value) == group_id:
                 return str(alias)
         return ""
+
+    def _target_aliases(self) -> dict[str, Any]:
+        value = self.config.get("target_aliases", {}) or {}
+        if isinstance(value, dict):
+            return value
+
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise CommandError(f"target_aliases 不是合法 JSON：{exc}") from exc
+            if not isinstance(parsed, dict):
+                raise CommandError("target_aliases 必须是 JSON 对象，例如 {\"main\": \"123456789\"}。")
+            return parsed
+
+        return {}
 
     def _extract_group_id(self, value: str) -> str:
         value = str(value).strip()

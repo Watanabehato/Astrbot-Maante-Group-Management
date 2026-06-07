@@ -29,9 +29,9 @@
     "hint": "只有这里列出的群能被 /gm 管理。建议和 AstrBot 的 UMO 白名单保持一致。"
   },
   "target_aliases": {
-    "description": "目标群别名映射。",
-    "type": "dict",
-    "default": {},
+    "description": "目标群别名映射，填写 JSON 对象。",
+    "type": "text",
+    "default": "{}",
     "hint": "示例：{\"test\": \"aiocqhttp:GroupMessage:123456789\", \"main\": \"987654321\"}",
     "editor_mode": true,
     "editor_language": "json"
