@@ -453,38 +453,139 @@ class MaanteGroupManagementPlugin(Star):
         return "Timeout" in message and "sendMsg" in message
 
     def _is_bot_message(self, event: AstrMessageEvent) -> bool:
-        """检查消息是否来自机器人（防止多个机器人实例互相回复）"""
+        """检查消息是否来自机器人或包含对机器人的引用（防止多个机器人实例互相回复）"""
         # 如果配置关闭了机器人互斥，直接返回 False
         if not self.config.get("ignore_bot_messages", True):
             return False
 
         sender_id = str(event.get_sender_id())
 
-        # 方法 1: 检查配置的机器人 QQ 号列表
-        bot_qq_ids = self._string_set(self.config.get("bot_qq_ids", []))
-        if bot_qq_ids and sender_id in bot_qq_ids:
+        # 获取所有机器人 QQ 号（用于后续检查）
+        bot_qq_ids = self._get_all_bot_qq_ids(event)
+
+        # 方法 1: 检查发送者是否是机器人
+        if sender_id in bot_qq_ids:
             return True
 
-        # 方法 2: 检查 event.sender 的 role 或特殊标识
-        # NapCat/OneBot 可能在 sender 中标记机器人身份
+        # 方法 2: 检查 event.sender 的 role 字段
         sender = getattr(event, "sender", None)
         if sender:
-            # 检查 role 字段（有些实现会标记为 "bot"）
             role = getattr(sender, "role", None)
             if role and role == "bot":
                 return True
 
-            # 检查 user_id 是否等于当前 bot 的 QQ 号
-            if hasattr(event, "bot") and hasattr(event.bot, "self_id"):
-                bot_self_id = str(event.bot.self_id)
-                if sender_id == bot_self_id:
+        # 方法 3: 检查消息中是否包含对机器人的 @ 引用
+        if self._message_mentions_bot(event, bot_qq_ids):
+            logger.debug(f"{PLUGIN_NAME} ignored message mentioning bot: {event.message_str}")
+            return True
+
+        # 方法 4: 检查消息中是否包含对机器人的引用回复
+        if self._message_replies_to_bot(event, bot_qq_ids):
+            logger.debug(f"{PLUGIN_NAME} ignored message replying to bot: {event.message_str}")
+            return True
+
+        return False
+
+    def _get_all_bot_qq_ids(self, event: AstrMessageEvent) -> set[str]:
+        """获取所有机器人 QQ 号（包括配置的和当前机器人的）"""
+        bot_qq_ids = self._string_set(self.config.get("bot_qq_ids", []))
+
+        # 添加当前机器人的 QQ 号
+        if hasattr(event, "bot") and hasattr(event.bot, "self_id"):
+            bot_qq_ids.add(str(event.bot.self_id))
+
+        return bot_qq_ids
+
+    def _message_mentions_bot(self, event: AstrMessageEvent, bot_qq_ids: set[str]) -> bool:
+        """检查消息是否包含对机器人的 @ 引用"""
+        if not bot_qq_ids:
+            return False
+
+        # 方法 1: 检查 message_str 中的 @mention
+        # OneBot/NapCat 的 CQ 码格式: [CQ:at,qq=123456789]
+        message_str = getattr(event, "message_str", "")
+        if message_str:
+            for bot_id in bot_qq_ids:
+                # 检查 CQ 码格式
+                if f"[CQ:at,qq={bot_id}]" in message_str:
+                    return True
+                # 检查纯文本 @
+                if f"@{bot_id}" in message_str:
                     return True
 
-        # 方法 3: 检查 event 上的 bot 相关字段
-        if hasattr(event, "bot") and hasattr(event.bot, "self_id"):
-            bot_self_id = str(event.bot.self_id)
-            if sender_id == bot_self_id:
-                return True
+        # 方法 2: 检查 raw_message（某些实现可能使用）
+        raw_message = getattr(event, "raw_message", None)
+        if raw_message:
+            for bot_id in bot_qq_ids:
+                if f"[CQ:at,qq={bot_id}]" in raw_message:
+                    return True
+                if f"@{bot_id}" in raw_message:
+                    return True
+
+        # 方法 3: 检查 message chain（如果 event 有 message_chain 属性）
+        message_chain = getattr(event, "message_chain", None)
+        if message_chain and hasattr(message_chain, "chain"):
+            for segment in message_chain.chain:
+                # 检查是否是 at 类型的消息段
+                if hasattr(segment, "type") and segment.type == "at":
+                    target = str(getattr(segment, "data", {}).get("qq", ""))
+                    if target in bot_qq_ids:
+                        return True
+
+        return False
+
+    def _message_replies_to_bot(self, event: AstrMessageEvent, bot_qq_ids: set[str]) -> bool:
+        """检查消息是否引用回复了机器人的消息（防止通过引用回复强制唤醒机器人）"""
+        if not bot_qq_ids:
+            return False
+
+        # 方法 1: 检查 message_str 或 raw_message 中的 reply CQ 码
+        # OneBot v11 的 reply 格式: [CQ:reply,id=消息ID]
+        # 注意：CQ 码中只包含消息 ID，不包含发送者信息，我们需要通过其他方式获取
+
+        # 方法 2: 检查 event 是否有 reply 字段（OneBot v11 标准）
+        # 某些实现会在事件中提供 reply 字段，包含被引用消息的详细信息
+        reply_info = getattr(event, "reply", None)
+        if reply_info:
+            # reply 可能是字典或对象
+            if isinstance(reply_info, dict):
+                reply_sender = str(reply_info.get("sender", {}).get("user_id", ""))
+                if reply_sender in bot_qq_ids:
+                    return True
+            elif hasattr(reply_info, "sender"):
+                reply_sender = str(getattr(reply_info.sender, "user_id", ""))
+                if reply_sender in bot_qq_ids:
+                    return True
+
+        # 方法 3: 检查 message_chain 中的 reply 消息段
+        message_chain = getattr(event, "message_chain", None)
+        if message_chain and hasattr(message_chain, "chain"):
+            for segment in message_chain.chain:
+                if hasattr(segment, "type") and segment.type == "reply":
+                    # 尝试从 segment.data 中获取被引用消息的发送者信息
+                    data = getattr(segment, "data", {})
+
+                    # 某些实现可能在 data 中包含 sender 或 user_id
+                    if isinstance(data, dict):
+                        reply_user_id = str(data.get("user_id", ""))
+                        if reply_user_id in bot_qq_ids:
+                            return True
+
+                        # 检查是否有嵌套的 sender 信息
+                        sender_info = data.get("sender", {})
+                        if isinstance(sender_info, dict):
+                            reply_user_id = str(sender_info.get("user_id", ""))
+                            if reply_user_id in bot_qq_ids:
+                                return True
+
+        # 方法 4: 检查原始消息对象（某些框架可能提供）
+        raw_event = getattr(event, "raw_event", None)
+        if raw_event and isinstance(raw_event, dict):
+            reply_info = raw_event.get("reply")
+            if reply_info and isinstance(reply_info, dict):
+                reply_sender = str(reply_info.get("sender", {}).get("user_id", ""))
+                if reply_sender in bot_qq_ids:
+                    return True
 
         return False
 
