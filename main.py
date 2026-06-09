@@ -45,6 +45,7 @@ class MaanteGroupManagementPlugin(Star):
         self.last_notified_version = None
         self.check_task = None
         self.session = None
+        self.bot_client = None  # 保存 bot 客户端引用
 
         if self.config.get("maante_check_enabled", False):
             self.check_task = asyncio.create_task(self._start_release_check_loop())
@@ -54,6 +55,10 @@ class MaanteGroupManagementPlugin(Star):
     async def group_management(self, event: AstrMessageEvent):
         """跨群管理指令入口，发送 /gm help 查看子指令说明。"""
         event.stop_event()
+
+        # 保存 bot 客户端引用，供后台任务使用
+        if self.bot_client is None and hasattr(event, "bot"):
+            self.bot_client = event.bot
 
         if not self._is_authorized(event):
             yield event.plain_result(
@@ -370,7 +375,7 @@ class MaanteGroupManagementPlugin(Star):
 
         for target in targets:
             try:
-                await self._send_group_message_direct(target.group_id, message)
+                await self._send_group_message_via_onebot(event, target.group_id, message)
                 success_count += 1
                 logger.info(f"{PLUGIN_NAME} manually pushed release {version} to group {target.group_id}")
             except Exception as exc:
@@ -382,6 +387,15 @@ class MaanteGroupManagementPlugin(Star):
             result_parts.append(f"推送失败的群：{', '.join(failed_targets)}")
 
         return "\n".join(result_parts)
+
+    async def _send_group_message_via_onebot(self, event: AstrMessageEvent, group_id: str, message: str):
+        """通过 OneBot API 直接发送群消息"""
+        await self._call_onebot(
+            event,
+            "send_group_msg",
+            group_id=int(group_id),
+            message=message,
+        )
 
     async def _call_onebot(self, event: AstrMessageEvent, action: str, **payload: Any) -> Any:
         client = getattr(event, "bot", None)
@@ -814,18 +828,29 @@ class MaanteGroupManagementPlugin(Star):
                 logger.error(f"{PLUGIN_NAME} failed to send release notification to {group_id}: {exc}")
 
     async def _send_group_message_direct(self, group_id: str, message: str):
-        if self.context.message_handler is None:
-            raise CommandError("消息处理器不可用")
+        """直接发送群消息（用于后台任务，无 event 对象）"""
+        if self.bot_client is None:
+            raise CommandError("Bot 客户端未初始化，请先使用 /gm 命令触发插件初始化")
 
-        from astrbot.api.event import MessageChain
+        if not hasattr(self.bot_client, "api"):
+            raise CommandError("Bot 客户端没有可用的 API")
 
-        chain = MessageChain()
-        chain.text(message)
-
-        platform_id = str(self.config.get("platform_id", "aiocqhttp")).strip() or "aiocqhttp"
-        umo = f"{platform_id}:GroupMessage:{group_id}"
-
-        await self.context.message_handler.send_message(chain, umo)
+        logger.info(f"{PLUGIN_NAME} call send_group_msg: group_id={group_id}")
+        try:
+            await self.bot_client.api.call_action(
+                "send_group_msg",
+                group_id=int(group_id),
+                message=message,
+            )
+        except Exception as exc:
+            # 检查是否是 NapCat 的 1200 超时错误
+            if self._should_ignore_send_timeout("send_group_msg", exc):
+                logger.warning(
+                    f"{PLUGIN_NAME} ignored NapCat send timeout for send_group_msg; "
+                    f"message may already be sent: {exc}"
+                )
+                return
+            raise
 
     async def terminate(self):
         if self.check_task is not None and not self.check_task.done():
