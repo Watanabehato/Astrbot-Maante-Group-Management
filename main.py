@@ -592,21 +592,35 @@ class MaanteGroupManagementPlugin(Star):
             }
             self.session = aiohttp.ClientSession(headers=headers)
 
-        mirror_url = self.config.get("maante_mirror_url", "https://gh-proxy.com")
+        mirror_url = self.config.get("maante_mirror_url", "")
+        notify_prerelease = self.config.get("maante_notify_prerelease", True)
 
-        # 尝试多种 URL 格式
+        # 使用 /releases 而不是 /releases/latest 来获取包括 prerelease 的版本
         urls = [
-            f"{mirror_url}/https://api.github.com/repos/1bananachicken/MaaNTE/releases/latest",
-            "https://api.github.com/repos/1bananachicken/MaaNTE/releases/latest",
-            f"https://ghproxy.net/https://api.github.com/repos/1bananachicken/MaaNTE/releases/latest",
+            f"{mirror_url}/https://api.github.com/repos/1bananachicken/MaaNTE/releases" if mirror_url else None,
+            "https://api.github.com/repos/1bananachicken/MaaNTE/releases",
+            "https://ghproxy.net/https://api.github.com/repos/1bananachicken/MaaNTE/releases",
         ]
 
         for api_url in urls:
+            if api_url is None:
+                continue
             try:
                 async with self.session.get(api_url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                     if resp.status == 200:
-                        logger.info(f"{PLUGIN_NAME} fetched release from: {api_url}")
-                        return await resp.json()
+                        releases = await resp.json()
+                        if not releases or not isinstance(releases, list):
+                            continue
+
+                        # 根据配置过滤：如果通知 prerelease，返回最新的任意版本；否则只返回正式版
+                        for release in releases:
+                            is_prerelease = release.get("prerelease", False)
+                            if notify_prerelease or not is_prerelease:
+                                logger.info(f"{PLUGIN_NAME} fetched release from: {api_url}")
+                                return release
+
+                        logger.debug(f"{PLUGIN_NAME} no matching release found in {api_url}")
+                        continue
                     logger.debug(f"{PLUGIN_NAME} fetch failed from {api_url}: HTTP {resp.status}")
             except Exception as exc:
                 logger.debug(f"{PLUGIN_NAME} fetch error from {api_url}: {exc}")
