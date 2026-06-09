@@ -60,6 +60,11 @@ class MaanteGroupManagementPlugin(Star):
         if self.bot_client is None and hasattr(event, "bot"):
             self.bot_client = event.bot
 
+        # 机器人互斥检查：防止多个机器人实例互相回复
+        if self._is_bot_message(event):
+            logger.debug(f"{PLUGIN_NAME} ignored message from bot: {event.sender.user_id}")
+            return
+
         if not self._is_authorized(event):
             yield event.plain_result(
                 "无权限使用 /gm。\n"
@@ -446,6 +451,42 @@ class MaanteGroupManagementPlugin(Star):
 
         message = str(exc)
         return "Timeout" in message and "sendMsg" in message
+
+    def _is_bot_message(self, event: AstrMessageEvent) -> bool:
+        """检查消息是否来自机器人（防止多个机器人实例互相回复）"""
+        # 如果配置关闭了机器人互斥，直接返回 False
+        if not self.config.get("ignore_bot_messages", True):
+            return False
+
+        sender_id = str(event.get_sender_id())
+
+        # 方法 1: 检查配置的机器人 QQ 号列表
+        bot_qq_ids = self._string_set(self.config.get("bot_qq_ids", []))
+        if bot_qq_ids and sender_id in bot_qq_ids:
+            return True
+
+        # 方法 2: 检查 event.sender 的 role 或特殊标识
+        # NapCat/OneBot 可能在 sender 中标记机器人身份
+        sender = getattr(event, "sender", None)
+        if sender:
+            # 检查 role 字段（有些实现会标记为 "bot"）
+            role = getattr(sender, "role", None)
+            if role and role == "bot":
+                return True
+
+            # 检查 user_id 是否等于当前 bot 的 QQ 号
+            if hasattr(event, "bot") and hasattr(event.bot, "self_id"):
+                bot_self_id = str(event.bot.self_id)
+                if sender_id == bot_self_id:
+                    return True
+
+        # 方法 3: 检查 event 上的 bot 相关字段
+        if hasattr(event, "bot") and hasattr(event.bot, "self_id"):
+            bot_self_id = str(event.bot.self_id)
+            if sender_id == bot_self_id:
+                return True
+
+        return False
 
     def _is_authorized(self, event: AstrMessageEvent) -> bool:
         controller_umos = self._string_set(self.config.get("controller_umos", []))

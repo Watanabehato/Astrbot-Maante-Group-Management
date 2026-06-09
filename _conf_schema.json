@@ -22,6 +22,18 @@
     "default": false,
     "hint": "高风险选项。开启后，只要消息来自 controller_umos，就可以执行跨群管理。"
   },
+  "ignore_bot_messages": {
+    "description": "是否忽略来自机器人的消息。",
+    "type": "bool",
+    "default": true,
+    "hint": "防止多个机器人实例互相回复导致循环。开启后，插件会忽略所有来自机器人账号的消息。"
+  },
+  "bot_qq_ids": {
+    "description": "机器人 QQ 号列表（用于互斥检测）。",
+    "type": "list",
+    "default": [],
+    "hint": "填写所有机器人的 QQ 号。留空则自动检测当前机器人 QQ 号。如有多个机器人实例，建议手动填写所有 QQ 号。"
+  },
   "ignore_send_timeout_1200": {
     "description": "是否忽略 NapCat sendMsg 的 retcode=1200 超时。",
     "type": "bool",

@@ -10,6 +10,7 @@
 - 操作者授权：默认只允许 `operator_user_ids` 中的 QQ 号操作。
 - 目标群白名单：只有 `managed_targets` 中的群可以被管理。
 - 目标别名：可以给单个群或多个群设置短别名，减少误操作。
+- **机器人互斥**：防止多个机器人实例互相回复导致循环（左脚踩右脚）。
 - MaaNTE Release 监控：定期检查 MaaNTE 更新，自动向被管理群发送更新通知。
 - NapCat 群管理动作：
   - 发送群消息
@@ -36,6 +37,8 @@
     "123456789"
   ],
   "allow_all_users_in_controller": false,
+  "ignore_bot_messages": true,
+  "bot_qq_ids": [],
   "ignore_send_timeout_1200": true,
   "managed_targets": [
     "aiocqhttp:GroupMessage:222222222",
@@ -111,6 +114,42 @@ aiocqhttp:GroupMessage:群号
 - `target_aliases` 中配置的别名，例如 `test` 或分组别名 `batch`
 - QQ 群号，例如 `222222222`
 - 完整 UMO，例如 `aiocqhttp:GroupMessage:222222222`
+
+## 机器人互斥
+
+当你运行多个机器人实例时（例如多个 NapCat 或 AstrBot），可能会出现机器人互相回复导致循环的问题（俗称"左脚踩右脚"）。
+
+### 配置说明
+
+- **ignore_bot_messages**：是否忽略来自机器人的消息，默认 `true`。
+  - 开启后，插件会自动忽略所有来自机器人账号的消息，防止循环回复。
+  - 如果你确定环境中只有一个机器人，可以关闭此选项。
+
+- **bot_qq_ids**：机器人 QQ 号列表，默认为空 `[]`。
+  - 填写所有机器人的 QQ 号，例如 `["1234567890", "9876543210"]`。
+  - 留空时，插件会自动检测当前机器人的 QQ 号。
+  - 如果有多个机器人实例，建议手动填写所有 QQ 号以获得最佳互斥效果。
+
+### 工作原理
+
+插件通过以下方式检测消息是否来自机器人：
+
+1. 检查配置的 `bot_qq_ids` 列表
+2. 检查 event.sender 的 role 字段（某些实现会标记为 "bot"）
+3. 检查发送者 QQ 号是否等于当前机器人的 self_id
+
+只要满足任一条件，消息就会被忽略，不会触发任何指令处理。
+
+### 配置示例
+
+```json
+{
+  "ignore_bot_messages": true,
+  "bot_qq_ids": ["1234567890", "9876543210"]
+}
+```
+
+**注意**：如果你的机器人需要响应其他机器人的指令，请将 `ignore_bot_messages` 设置为 `false`。
 
 ## MaaNTE Release 监控
 
