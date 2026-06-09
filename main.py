@@ -586,20 +586,34 @@ class MaanteGroupManagementPlugin(Star):
 
     async def _fetch_latest_release(self) -> Optional[Dict[str, Any]]:
         if self.session is None:
-            self.session = aiohttp.ClientSession()
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Accept": "application/vnd.github.v3+json"
+            }
+            self.session = aiohttp.ClientSession(headers=headers)
 
         mirror_url = self.config.get("maante_mirror_url", "https://gh-proxy.com")
-        api_url = f"{mirror_url}/https://api.github.com/repos/1bananachicken/MaaNTE/releases/latest"
 
-        try:
-            async with self.session.get(api_url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                if resp.status == 200:
-                    return await resp.json()
-                logger.warning(f"{PLUGIN_NAME} fetch MaaNTE release failed: HTTP {resp.status}")
-                return None
-        except Exception as exc:
-            logger.error(f"{PLUGIN_NAME} fetch MaaNTE release error: {exc}")
-            return None
+        # 尝试多种 URL 格式
+        urls = [
+            f"{mirror_url}/https://api.github.com/repos/1bananachicken/MaaNTE/releases/latest",
+            "https://api.github.com/repos/1bananachicken/MaaNTE/releases/latest",
+            f"https://ghproxy.net/https://api.github.com/repos/1bananachicken/MaaNTE/releases/latest",
+        ]
+
+        for api_url in urls:
+            try:
+                async with self.session.get(api_url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status == 200:
+                        logger.info(f"{PLUGIN_NAME} fetched release from: {api_url}")
+                        return await resp.json()
+                    logger.debug(f"{PLUGIN_NAME} fetch failed from {api_url}: HTTP {resp.status}")
+            except Exception as exc:
+                logger.debug(f"{PLUGIN_NAME} fetch error from {api_url}: {exc}")
+                continue
+
+        logger.warning(f"{PLUGIN_NAME} failed to fetch MaaNTE release from all sources")
+        return None
 
     async def _start_release_check_loop(self):
         if not self.config.get("maante_check_enabled", False):

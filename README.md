@@ -46,7 +46,7 @@
   "maante_check_interval": 3600,
   "maante_notify_prerelease": true,
   "maante_custom_message": "下载地址：https://github.com/1bananachicken/MaaNTE/releases/latest",
-  "maante_mirror_url": "https://gh-proxy.com"
+  "maante_mirror_url": ""
 }
 ```
 
@@ -121,7 +121,7 @@ aiocqhttp:GroupMessage:群号
 - **maante_check_interval**：检查间隔（秒），默认 `3600`（1小时）。建议设置为 1800-7200 秒。
 - **maante_notify_prerelease**：是否通知公测版更新，默认 `true`。关闭后只通知正式版。
 - **maante_custom_message**：自定义消息内容，会显示在通知开头。可用于添加下载链接、使用说明等。
-- **maante_mirror_url**：GitHub API 镜像站地址，默认 `https://gh-proxy.com`。用于加速访问。
+- **maante_mirror_url**：GitHub API 镜像站地址，默认为空（直连）。可选镜像站：`https://gh-proxy.com`、`https://ghproxy.net`。插件会自动尝试多个源。
 
 ### 通知格式
 

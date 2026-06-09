@@ -67,9 +67,9 @@
     "hint": "会显示在通知开头，可用于添加下载链接、使用说明等。留空则不添加。"
   },
   "maante_mirror_url": {
-    "description": "GitHub API 镜像站地址。",
+    "description": "GitHub API 镜像站地址（留空则直连 GitHub）。",
     "type": "string",
-    "default": "https://gh-proxy.com",
-    "hint": "用于加速访问 GitHub API。默认使用 gh-proxy.com。"
+    "default": "",
+    "hint": "可选镜像站：https://gh-proxy.com 或 https://ghproxy.net。留空直连 GitHub API。"
   }
 }
