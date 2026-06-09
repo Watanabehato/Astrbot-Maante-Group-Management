@@ -1,7 +1,10 @@
+import asyncio
 import json
 import shlex
-from typing import Any
+from datetime import datetime
+from typing import Any, Optional, Dict
 
+import aiohttp
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
@@ -23,6 +26,8 @@ COMMAND_DESCRIPTIONS = [
     ("/gm wholeban <目标> on|off", "开启或关闭目标群全员禁言。"),
     ("/gm card <目标> <QQ号> <群名片>", "设置指定 QQ 号在目标群的群名片。"),
     ("/gm admin <目标> <QQ号> on|off", "设置或取消指定 QQ 号在目标群的管理员权限。"),
+    ("/gm maante check", "立即检查 MaaNTE 最新 Release。"),
+    ("/gm maante status", "查看 MaaNTE Release 监控状态。"),
 ]
 
 
@@ -36,6 +41,12 @@ class MaanteGroupManagementPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
+        self.last_notified_version = None
+        self.check_task = None
+        self.session = None
+
+        if self.config.get("maante_check_enabled", False):
+            self.check_task = asyncio.create_task(self._start_release_check_loop())
 
     @filter.command("gm")
     @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
@@ -67,6 +78,8 @@ class MaanteGroupManagementPlugin(Star):
                 yield event.plain_result(self._sid_text(event))
             elif command in {"list", "ls", "列表"}:
                 yield event.plain_result(self._target_list_text())
+            elif command == "maante":
+                yield event.plain_result(await self._cmd_maante(event, args[1:]))
             elif command in {"send", "say", "通知"}:
                 yield event.plain_result(await self._cmd_send(event, args[1:]))
             elif command in {"atall", "all", "全员消息"}:
@@ -266,6 +279,44 @@ class MaanteGroupManagementPlugin(Star):
                 f"人数：{member_count}/{max_member_count}"
             )
         return "\n\n".join(lines)
+
+    async def _cmd_maante(self, event: AstrMessageEvent, args: list[str]) -> str:
+        if not args:
+            raise CommandError("用法：/gm maante check|status")
+
+        subcommand = args[0].lower()
+        if subcommand in {"check", "检查"}:
+            release = await self._fetch_latest_release()
+            if not release:
+                return "未能获取 MaaNTE Release 信息。"
+
+            version = release.get("tag_name", "未知版本")
+            name = release.get("name", "")
+            is_prerelease = release.get("prerelease", False)
+            published_at = release.get("published_at", "")
+
+            release_type = "公测版" if is_prerelease else "正式版"
+            return (
+                f"MaaNTE 最新 Release：\n"
+                f"版本：{version} ({release_type})\n"
+                f"标题：{name}\n"
+                f"发布时间：{published_at}"
+            )
+        elif subcommand in {"status", "状态"}:
+            check_enabled = self.config.get("maante_check_enabled", False)
+            check_interval = self.config.get("maante_check_interval", 3600)
+            last_version = self.last_notified_version or "未知"
+            task_running = self.check_task is not None and not self.check_task.done()
+
+            return (
+                f"MaaNTE Release 监控状态：\n"
+                f"监控开关：{'已开启' if check_enabled else '已关闭'}\n"
+                f"检查间隔：{check_interval} 秒\n"
+                f"后台任务：{'运行中' if task_running else '未运行'}\n"
+                f"上次通知版本：{last_version}"
+            )
+        else:
+            raise CommandError("未知子指令，用法：/gm maante check|status")
 
     async def _call_onebot(self, event: AstrMessageEvent, action: str, **payload: Any) -> Any:
         client = getattr(event, "bot", None)
@@ -533,7 +584,119 @@ class MaanteGroupManagementPlugin(Star):
     def _string_set(self, value: Any) -> set[str]:
         return set(self._string_list(value))
 
+    async def _fetch_latest_release(self) -> Optional[Dict[str, Any]]:
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+
+        mirror_url = self.config.get("maante_mirror_url", "https://gh-proxy.com")
+        api_url = f"{mirror_url}/https://api.github.com/repos/1bananachicken/MaaNTE/releases/latest"
+
+        try:
+            async with self.session.get(api_url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                logger.warning(f"{PLUGIN_NAME} fetch MaaNTE release failed: HTTP {resp.status}")
+                return None
+        except Exception as exc:
+            logger.error(f"{PLUGIN_NAME} fetch MaaNTE release error: {exc}")
+            return None
+
+    async def _start_release_check_loop(self):
+        if not self.config.get("maante_check_enabled", False):
+            logger.info(f"{PLUGIN_NAME} MaaNTE release check is disabled")
+            return
+
+        check_interval = self.config.get("maante_check_interval", 3600)
+        logger.info(f"{PLUGIN_NAME} starting MaaNTE release check loop, interval: {check_interval}s")
+
+        while True:
+            try:
+                await asyncio.sleep(check_interval)
+                await self._check_and_notify_release()
+            except asyncio.CancelledError:
+                logger.info(f"{PLUGIN_NAME} release check loop cancelled")
+                break
+            except Exception as exc:
+                logger.exception(f"{PLUGIN_NAME} release check loop error: {exc}")
+
+    async def _check_and_notify_release(self):
+        release = await self._fetch_latest_release()
+        if not release:
+            return
+
+        version = release.get("tag_name", "")
+        is_prerelease = release.get("prerelease", False)
+        name = release.get("name", "")
+        body = release.get("body", "")
+        published_at = release.get("published_at", "")
+
+        notify_prerelease = self.config.get("maante_notify_prerelease", True)
+        if is_prerelease and not notify_prerelease:
+            logger.debug(f"{PLUGIN_NAME} skipping prerelease notification: {version}")
+            return
+
+        if self.last_notified_version == version:
+            return
+
+        logger.info(f"{PLUGIN_NAME} new MaaNTE release detected: {version}")
+        self.last_notified_version = version
+
+        release_type = "公测版" if is_prerelease else "正式版"
+        custom_message = self.config.get("maante_custom_message", "")
+
+        message_parts = [f"MaaNTE {release_type}更新通知"]
+        if custom_message:
+            message_parts.append(custom_message)
+        message_parts.extend([
+            f"\n版本：{version}",
+            f"标题：{name}",
+            f"发布时间：{published_at}",
+            f"\nChangelog：\n{body}"
+        ])
+
+        message = "\n".join(message_parts)
+
+        managed_targets = self._string_list(self.config.get("managed_targets", []))
+        if not managed_targets:
+            logger.warning(f"{PLUGIN_NAME} no managed targets configured, skipping notification")
+            return
+
+        for target_value in managed_targets:
+            group_id = self._extract_group_id(target_value)
+            if not group_id:
+                continue
+
+            try:
+                await self._send_group_message_direct(group_id, message)
+                logger.info(f"{PLUGIN_NAME} sent release notification to group {group_id}")
+            except Exception as exc:
+                logger.error(f"{PLUGIN_NAME} failed to send release notification to {group_id}: {exc}")
+
+    async def _send_group_message_direct(self, group_id: str, message: str):
+        if self.context.message_handler is None:
+            raise CommandError("消息处理器不可用")
+
+        from astrbot.api.event import MessageChain
+
+        chain = MessageChain()
+        chain.text(message)
+
+        platform_id = str(self.config.get("platform_id", "aiocqhttp")).strip() or "aiocqhttp"
+        umo = f"{platform_id}:GroupMessage:{group_id}"
+
+        await self.context.message_handler.send_message(chain, umo)
+
     async def terminate(self):
+        if self.check_task is not None and not self.check_task.done():
+            self.check_task.cancel()
+            try:
+                await self.check_task
+            except asyncio.CancelledError:
+                pass
+
+        if self.session is not None:
+            await self.session.close()
+
         logger.info(f"{PLUGIN_NAME} terminated")
 
 

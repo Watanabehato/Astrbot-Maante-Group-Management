@@ -10,6 +10,7 @@
 - 操作者授权：默认只允许 `operator_user_ids` 中的 QQ 号操作。
 - 目标群白名单：只有 `managed_targets` 中的群可以被管理。
 - 目标别名：可以给单个群或多个群设置短别名，减少误操作。
+- MaaNTE Release 监控：定期检查 MaaNTE 更新，自动向被管理群发送更新通知。
 - NapCat 群管理动作：
   - 发送群消息
   - 发送 @全员消息
@@ -40,7 +41,12 @@
     "aiocqhttp:GroupMessage:222222222",
     "333333333"
   ],
-  "target_aliases": "{\"test\": \"aiocqhttp:GroupMessage:222222222\", \"main\": \"333333333\", \"batch\": [\"222222222\", \"aiocqhttp:GroupMessage:333333333\"]}"
+  "target_aliases": "{\"test\": \"aiocqhttp:GroupMessage:222222222\", \"main\": \"333333333\", \"batch\": [\"222222222\", \"aiocqhttp:GroupMessage:333333333\"]}",
+  "maante_check_enabled": true,
+  "maante_check_interval": 3600,
+  "maante_notify_prerelease": true,
+  "maante_custom_message": "下载地址：https://github.com/1bananachicken/MaaNTE/releases/latest",
+  "maante_mirror_url": "https://gh-proxy.com"
 }
 ```
 
@@ -82,6 +88,8 @@ aiocqhttp:GroupMessage:群号
 | `/gm wholeban <目标> on\|off` | 开启或关闭目标群全员禁言。 |
 | `/gm card <目标> <QQ号> <群名片>` | 设置指定 QQ 号在目标群的群名片。 |
 | `/gm admin <目标> <QQ号> on\|off` | 设置或取消指定 QQ 号在目标群的管理员权限。 |
+| `/gm maante check` | 立即检查 MaaNTE 最新 Release。 |
+| `/gm maante status` | 查看 MaaNTE Release 监控状态。 |
 
 示例：
 
@@ -102,6 +110,40 @@ aiocqhttp:GroupMessage:群号
 - `target_aliases` 中配置的别名，例如 `test` 或分组别名 `batch`
 - QQ 群号，例如 `222222222`
 - 完整 UMO，例如 `aiocqhttp:GroupMessage:222222222`
+
+## MaaNTE Release 监控
+
+插件支持自动监控 MaaNTE 的 GitHub Release 更新，并在发现新版本时自动向所有被管理群发送通知。
+
+### 配置说明
+
+- **maante_check_enabled**：是否启用监控，默认 `false`。
+- **maante_check_interval**：检查间隔（秒），默认 `3600`（1小时）。建议设置为 1800-7200 秒。
+- **maante_notify_prerelease**：是否通知公测版更新，默认 `true`。关闭后只通知正式版。
+- **maante_custom_message**：自定义消息内容，会显示在通知开头。可用于添加下载链接、使用说明等。
+- **maante_mirror_url**：GitHub API 镜像站地址，默认 `https://gh-proxy.com`。用于加速访问。
+
+### 通知格式
+
+当检测到新版本时，插件会向所有 `managed_targets` 中的群发送以下格式的消息：
+
+```
+MaaNTE 正式版/公测版更新通知
+[自定义消息]
+
+版本：v1.0.0
+标题：Release Title
+发布时间：2026-06-09T12:00:00Z
+
+Changelog：
+- 新增功能 A
+- 修复 Bug B
+- 优化性能 C
+```
+
+### 手动检查
+
+可以在控制群发送 `/gm maante check` 立即检查最新版本，或发送 `/gm maante status` 查看监控状态。
 
 ## 注意
 

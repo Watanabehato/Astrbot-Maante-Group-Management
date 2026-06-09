@@ -41,5 +41,35 @@
     "hint": "示例：{\"main\": \"987654321\", \"test_group\": [\"123456789\", \"aiocqhttp:GroupMessage:222222222\"]}",
     "editor_mode": true,
     "editor_language": "json"
+  },
+  "maante_check_enabled": {
+    "description": "是否启用 MaaNTE Release 更新检查。",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后，插件会定期检查 MaaNTE Release，并在发现新版本时向所有被管理群发送通知。"
+  },
+  "maante_check_interval": {
+    "description": "MaaNTE Release 检查间隔（秒）。",
+    "type": "int",
+    "default": 3600,
+    "hint": "建议设置为 1800（30分钟）到 7200（2小时）之间。"
+  },
+  "maante_notify_prerelease": {
+    "description": "是否通知 MaaNTE 公测版（prerelease）更新。",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后，只通知正式版更新，不通知公测版。"
+  },
+  "maante_custom_message": {
+    "description": "MaaNTE 更新通知的自定义消息。",
+    "type": "text",
+    "default": "",
+    "hint": "会显示在通知开头，可用于添加下载链接、使用说明等。留空则不添加。"
+  },
+  "maante_mirror_url": {
+    "description": "GitHub API 镜像站地址。",
+    "type": "string",
+    "default": "https://gh-proxy.com",
+    "hint": "用于加速访问 GitHub API。默认使用 gh-proxy.com。"
   }
 }
