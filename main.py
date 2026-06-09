@@ -406,6 +406,14 @@ class MaanteGroupManagementPlugin(Star):
         try:
             return await client.api.call_action(action, **payload)
         except Exception as exc:
+            # 检查是否是被移出群的错误
+            if self._is_removed_from_group_error(exc):
+                group_id = payload.get("group_id", "未知")
+                error_msg = f"无法发送消息到群 {group_id}：机器人已被移出该群。"
+                logger.error(f"{PLUGIN_NAME} {error_msg}")
+                raise CommandError(error_msg)
+
+            # 检查是否是 NapCat 的 1200 超时错误（可忽略）
             if self._should_ignore_send_timeout(action, exc):
                 logger.warning(
                     f"{PLUGIN_NAME} ignored NapCat send timeout for {action}; "
@@ -413,6 +421,16 @@ class MaanteGroupManagementPlugin(Star):
                 )
                 return {"status": "ok", "retcode": 0, "message": "ignored NapCat send timeout"}
             raise
+
+    def _is_removed_from_group_error(self, exc: Exception) -> bool:
+        """检查是否是被移出群的错误"""
+        exc_str = str(exc)
+        # NapCat 返回的错误信息
+        return (
+            'result": 110' in exc_str or
+            '你已被移出该群' in exc_str or
+            'errMsg": "发送失败，你已被移出该群' in exc_str
+        )
 
     def _should_ignore_send_timeout(self, action: str, exc: Exception) -> bool:
         if not self.config.get("ignore_send_timeout_1200", True):
@@ -843,6 +861,12 @@ class MaanteGroupManagementPlugin(Star):
                 message=message,
             )
         except Exception as exc:
+            # 检查是否是被移出群的错误
+            if self._is_removed_from_group_error(exc):
+                error_msg = f"无法发送消息到群 {group_id}：机器人已被移出该群。"
+                logger.error(f"{PLUGIN_NAME} {error_msg}")
+                raise CommandError(error_msg)
+
             # 检查是否是 NapCat 的 1200 超时错误
             if self._should_ignore_send_timeout("send_group_msg", exc):
                 logger.warning(
