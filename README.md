@@ -90,6 +90,7 @@ aiocqhttp:GroupMessage:群号
 | `/gm admin <目标> <QQ号> on\|off` | 设置或取消指定 QQ 号在目标群的管理员权限。 |
 | `/gm maante check` | 立即检查 MaaNTE 最新 Release。 |
 | `/gm maante status` | 查看 MaaNTE Release 监控状态。 |
+| `/gm maante push <目标> [版本]` | 手动推送 MaaNTE Release 信息到目标群；不指定版本则推送最新版本。 |
 
 示例：
 
@@ -141,9 +142,18 @@ Changelog：
 - 优化性能 C
 ```
 
-### 手动检查
+### 手动检查与推送
 
-可以在控制群发送 `/gm maante check` 立即检查最新版本，或发送 `/gm maante status` 查看监控状态。
+- **手动检查**：在控制群发送 `/gm maante check` 立即检查最新版本
+- **查看状态**：发送 `/gm maante status` 查看监控状态
+- **手动推送**：发送 `/gm maante push <目标> [版本]` 手动推送 Release 信息到指定群
+
+手动推送示例：
+```
+/gm maante push main              # 推送最新版本到 main 别名对应的群
+/gm maante push batch v1.1.0      # 推送 v1.1.0 版本到 batch 别名的所有群
+/gm maante push 123456789 v1.0.1  # 推送 v1.0.1 版本到指定群号
+```
 
 ## 注意
 

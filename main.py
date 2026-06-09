@@ -28,6 +28,7 @@ COMMAND_DESCRIPTIONS = [
     ("/gm admin <目标> <QQ号> on|off", "设置或取消指定 QQ 号在目标群的管理员权限。"),
     ("/gm maante check", "立即检查 MaaNTE 最新 Release。"),
     ("/gm maante status", "查看 MaaNTE Release 监控状态。"),
+    ("/gm maante push <目标> [版本]", "手动推送 MaaNTE Release 信息到目标群；不指定版本则推送最新版本。"),
 ]
 
 
@@ -282,7 +283,7 @@ class MaanteGroupManagementPlugin(Star):
 
     async def _cmd_maante(self, event: AstrMessageEvent, args: list[str]) -> str:
         if not args:
-            raise CommandError("用法：/gm maante check|status")
+            raise CommandError("用法：/gm maante check|status|push")
 
         subcommand = args[0].lower()
         if subcommand in {"check", "检查"}:
@@ -315,8 +316,72 @@ class MaanteGroupManagementPlugin(Star):
                 f"后台任务：{'运行中' if task_running else '未运行'}\n"
                 f"上次通知版本：{last_version}"
             )
+        elif subcommand in {"push", "推送"}:
+            return await self._cmd_maante_push(event, args[1:])
         else:
-            raise CommandError("未知子指令，用法：/gm maante check|status")
+            raise CommandError("未知子指令，用法：/gm maante check|status|push")
+
+    async def _cmd_maante_push(self, event: AstrMessageEvent, args: list[str]) -> str:
+        """手动推送 MaaNTE Release 信息到目标群"""
+        if not args:
+            raise CommandError("用法：/gm maante push <目标> [版本]\n目标可以是群号、别名或 UMO；不指定版本则推送最新版本。")
+
+        target_arg = args[0]
+        version_arg = args[1] if len(args) > 1 else None
+
+        # 解析目标群
+        targets = self._resolve_targets(target_arg)
+
+        # 获取 Release 信息
+        if version_arg:
+            release = await self._fetch_release_by_version(version_arg)
+            if not release:
+                return f"未找到版本 {version_arg} 的 Release 信息。"
+        else:
+            release = await self._fetch_latest_release()
+            if not release:
+                return "未能获取 MaaNTE Release 信息。"
+
+        # 构建推送消息
+        version = release.get("tag_name", "未知版本")
+        name = release.get("name", "")
+        body = release.get("body", "")
+        published_at = release.get("published_at", "")
+        is_prerelease = release.get("prerelease", False)
+
+        release_type = "公测版" if is_prerelease else "正式版"
+        custom_message = self.config.get("maante_custom_message", "")
+
+        message_parts = [f"MaaNTE {release_type}更新通知"]
+        if custom_message:
+            message_parts.append(custom_message)
+        message_parts.extend([
+            f"\n版本：{version}",
+            f"标题：{name}",
+            f"发布时间：{published_at}",
+            f"\nChangelog：\n{body}"
+        ])
+
+        message = "\n".join(message_parts)
+
+        # 推送到目标群
+        success_count = 0
+        failed_targets = []
+
+        for target in targets:
+            try:
+                await self._send_group_message_direct(target.group_id, message)
+                success_count += 1
+                logger.info(f"{PLUGIN_NAME} manually pushed release {version} to group {target.group_id}")
+            except Exception as exc:
+                failed_targets.append(target.display_name)
+                logger.error(f"{PLUGIN_NAME} failed to push release to {target.group_id}: {exc}")
+
+        result_parts = [f"已向 {success_count} 个群推送 {version} 的 Release 信息。"]
+        if failed_targets:
+            result_parts.append(f"推送失败的群：{', '.join(failed_targets)}")
+
+        return "\n".join(result_parts)
 
     async def _call_onebot(self, event: AstrMessageEvent, action: str, **payload: Any) -> Any:
         client = getattr(event, "bot", None)
@@ -627,6 +692,54 @@ class MaanteGroupManagementPlugin(Star):
                 continue
 
         logger.warning(f"{PLUGIN_NAME} failed to fetch MaaNTE release from all sources")
+        return None
+
+    async def _fetch_release_by_version(self, version: str) -> Optional[Dict[str, Any]]:
+        """根据版本号获取指定的 Release"""
+        if self.session is None:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Accept": "application/vnd.github.v3+json"
+            }
+            self.session = aiohttp.ClientSession(headers=headers)
+
+        # 规范化版本号，确保有 v 前缀
+        if not version.startswith("v"):
+            version = f"v{version}"
+
+        mirror_url = self.config.get("maante_mirror_url", "")
+
+        urls = [
+            f"{mirror_url}/https://api.github.com/repos/1bananachicken/MaaNTE/releases" if mirror_url else None,
+            "https://api.github.com/repos/1bananachicken/MaaNTE/releases",
+            "https://ghproxy.net/https://api.github.com/repos/1bananachicken/MaaNTE/releases",
+        ]
+
+        for api_url in urls:
+            if api_url is None:
+                continue
+            try:
+                async with self.session.get(api_url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status == 200:
+                        releases = await resp.json()
+                        if not releases or not isinstance(releases, list):
+                            continue
+
+                        # 查找匹配的版本
+                        for release in releases:
+                            tag_name = release.get("tag_name", "")
+                            if tag_name == version:
+                                logger.info(f"{PLUGIN_NAME} fetched release {version} from: {api_url}")
+                                return release
+
+                        logger.debug(f"{PLUGIN_NAME} version {version} not found in {api_url}")
+                        continue
+                    logger.debug(f"{PLUGIN_NAME} fetch failed from {api_url}: HTTP {resp.status}")
+            except Exception as exc:
+                logger.debug(f"{PLUGIN_NAME} fetch error from {api_url}: {exc}")
+                continue
+
+        logger.warning(f"{PLUGIN_NAME} failed to fetch release {version} from all sources")
         return None
 
     async def _start_release_check_loop(self):
